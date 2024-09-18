@@ -26,27 +26,17 @@ const app = new Frog({
 });
 
 app.frame("/", (c) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">
+      <rect width="800" height="800" fill="#f0f0f0"/>
+      <text x="400" y="400" font-family="Arial, sans-serif" font-size="32" text-anchor="middle" dominant-baseline="middle" fill="#000000">
+        Farcaster Engagement Leaderboard
+      </text>
+    </svg>
+  `;
+  
   return c.res({
-    image: (
-      <div
-        style={{
-          width: '800px',
-          height: '800px',
-          backgroundColor: '#f0f0f0',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'Arial, sans-serif',
-        }}
-      >
-        <img 
-          src={`${process.env.NEXT_PUBLIC_HOST}/Default.png`} 
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-          alt="Default"
-        />
-      </div>
-    ),
+    image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
     intents: [<Button action="/channel">Start</Button>],
   });
 });
