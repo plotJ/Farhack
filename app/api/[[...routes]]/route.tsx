@@ -8,6 +8,13 @@ import { serveStatic } from "frog/serve-static";
 import { Fan } from "../../utils/interface";
 import { Buffer } from 'buffer';
 import { getTopFans, postLum0xTestFrameValidation } from "../../utils/helpers";
+import { fetchTopContributors } from "../../utils/nanograph";
+import { generateLeaderboardImage } from "../../utils/imageGeneration";
+import { generateCombinedLeaderboardImage } from "../../utils/imageGeneration";
+import { getDetailedUserData } from "../../utils/helpers";
+
+
+
 
 const app = new Frog({
   assetsPath: "/",
@@ -27,27 +34,16 @@ const app = new Frog({
 
 app.frame("/", (c) => {
   return c.res({
-    image: (
-      <div
-        style={{
-          width: '800px',
-          height: '800px',
-          backgroundColor: '#f0f0f0',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'Arial, sans-serif',
-        }}
-      >
-        <img 
-          src={`${process.env.NEXT_PUBLIC_HOST}/Default.png`} 
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-          alt="Default"
-        />
-      </div>
-    ),
-    intents: [<Button action="/channel">Start</Button>],
+      image: (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0' }}>
+              <h1>Farcaster Channel Leaderboard</h1>
+              <p>Enter a channel name to see top contributors</p>
+          </div>
+      ),
+      intents: [
+          <TextInput placeholder="Enter channel name (e.g., farhack)" />,
+          <Button action="/leaderboard">Get Leaderboard</Button>
+      ]
   });
 });
 
@@ -156,6 +152,51 @@ app.frame("/result", async (c) => {
       image: `data:image/svg+xml;base64,${Buffer.from(errorSvg).toString('base64')}`,
       intents: [<Button action="/">Try Again</Button>],
     });
+  }
+});
+
+app.frame("/leaderboard", async (c) => {
+  try {
+      const channel = c.inputText || 'farhack';
+      const timeframe = 'week'; // You can make this dynamic if needed
+
+      const topContributors = await fetchTopContributors(channel, 10);
+      const detailedData = await Promise.all(
+          topContributors.map(contributor => getDetailedUserData(contributor.fid, timeframe))
+      );
+
+      const leaderboardSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+          <rect width="800" height="800" fill="#f0f0f0"/>
+          <text x="400" y="50" font-family="Arial, sans-serif" font-size="32" text-anchor="middle" font-weight="bold">Top Contributors - ${channel}</text>
+          <text x="400" y="80" font-family="Arial, sans-serif" font-size="24" text-anchor="middle">Past ${timeframe}</text>
+          
+          ${detailedData.map((user, index) => `
+              <text x="20" y="${120 + index * 65}" font-family="Arial, sans-serif" font-size="16" font-weight="bold">${index + 1}. ${user.display_name}</text>
+              <text x="20" y="${140 + index * 65}" font-family="Arial, sans-serif" font-size="14">Casts: ${user.casts} | Likes: ${user.likes} | Recasts: ${user.recasts}</text>
+              <text x="20" y="${160 + index * 65}" font-family="Arial, sans-serif" font-size="14" fill="blue">Score: ${user.score}</text>
+          `).join('')}
+      </svg>
+      `;
+
+      return c.res({
+          image: `data:image/svg+xml;base64,${Buffer.from(leaderboardSvg).toString('base64')}`,
+          intents: [
+              <Button action="/">Back</Button>,
+              <Button action="/leaderboard">Refresh</Button>
+          ]
+      });
+  } catch (error) {
+      console.error("Error in leaderboard frame:", error);
+      return c.res({
+          image: (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0' }}>
+                  <h1>Error</h1>
+                  <p>{error instanceof Error ? error.message : String(error)}</p>
+              </div>
+          ),
+          intents: [<Button action="/">Back</Button>]
+      });
   }
 });
 

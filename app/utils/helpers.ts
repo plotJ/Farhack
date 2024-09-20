@@ -25,13 +25,9 @@ export async function postLum0xTestFrameValidation(fid: number, path: string) {
 
 export async function getTopFans(channel: string, timeframe: string, limit: number): Promise<Fan[]> {
   try {
-    console.log(`Fetching top fans for channel: ${channel}, timeframe: ${timeframe}, limit: ${limit}`);
-    let feedType = "filter";
-    let filterType = channel ? "channel_id" : "all";
-    
     let queryParams: any = {
-      feed_type: feedType,
-      filter_type: filterType,
+      feed_type: "filter",
+      filter_type: channel ? "channel_id" : "global_trending", // Changed from 'all' to 'global_trending'
       limit: 100,
     };
 
@@ -43,29 +39,62 @@ export async function getTopFans(channel: string, timeframe: string, limit: numb
 
     let res = await Lum0x.farcasterFeed.getFeed(queryParams);
 
-    console.log("Raw API response:", JSON.stringify(res, null, 2));
-    console.log(`Received ${res.casts?.length || 0} casts from API`);
+    console.log("Lum0x API response:", res);
 
     if (!res.casts || res.casts.length === 0) {
-      throw new Error("No casts found for the given criteria");
+      return [];
     }
 
     let fanEngagement: { [key: number]: Fan } = {};
 
     for (let cast of res.casts) {
-      console.log("Processing cast:", JSON.stringify(cast, null, 2));
       processEngagement(cast, fanEngagement);
     }
 
     let sortedFans = Object.values(fanEngagement).sort((a, b) => b.score - a.score);
-    console.log(`Processed ${sortedFans.length} fans`);
-    console.log("Sorted fans:", JSON.stringify(sortedFans, null, 2));
     return sortedFans.slice(0, limit);
   } catch (error) {
     console.error("Error in getTopFans:", error);
     throw error;
   }
 }
+
+export async function getDetailedUserData(fid: number, timeframe: string) {
+  try {
+      const res = await Lum0x.farcasterUser.getUserByFids({ fids: fid.toString() });
+      const user = res.users[0];
+
+      const feedRes = await Lum0x.farcasterFeed.getFeed({
+          feed_type: "filter",
+          filter_type: "fids",
+          fids: fid.toString(),
+          limit: 100,
+          start_time: getStartDate(timeframe)
+      });
+
+      let totalLikes = 0;
+      let totalRecasts = 0;
+      feedRes.casts.forEach(cast => {
+          totalLikes += cast.reactions?.likes?.length || 0;
+          totalRecasts += cast.reactions?.recasts?.length || 0;
+      });
+
+      return {
+          fid: user.fid,
+          username: user.username,
+          display_name: user.display_name,
+          casts: feedRes.casts.length,
+          likes: totalLikes,
+          recasts: totalRecasts,
+          score: totalLikes + (totalRecasts * 2)
+      };
+  } catch (error) {
+      console.error("Error fetching detailed user data:", error);
+      throw error;
+  }
+}
+
+
 
 function processEngagement(cast: any, fanEngagement: { [key: number]: Fan }) {
   let fid = cast.author.fid;
@@ -94,15 +123,15 @@ function calculateScore(recasts: number, reactions: number): number {
 function getStartDate(timeframe: string): string {
   let date = new Date();
   switch (timeframe) {
-    case 'day':
-      date.setDate(date.getDate() - 1);
-      break;
-    case 'week':
-      date.setDate(date.getDate() - 7);
-      break;
-    case 'month':
-      date.setMonth(date.getMonth() - 1);
-      break;
+      case 'day':
+          date.setDate(date.getDate() - 1);
+          break;
+      case 'week':
+          date.setDate(date.getDate() - 7);
+          break;
+      case 'month':
+          date.setMonth(date.getMonth() - 1);
+          break;
   }
   return date.toISOString();
 }
