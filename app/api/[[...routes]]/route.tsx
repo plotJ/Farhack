@@ -9,9 +9,9 @@ import { Fan } from "../../utils/interface";
 import { Buffer } from 'buffer';
 import { getTopFans, postLum0xTestFrameValidation } from "../../utils/helpers";
 import { fetchTopContributors } from "../../utils/nanograph";
-import { generateLeaderboardImage } from "../../utils/imageGeneration";
-import { generateCombinedLeaderboardImage } from "../../utils/imageGeneration";
 import { getDetailedUserData } from "../../utils/helpers";
+import { Contributor } from "../../utils/nanograph";
+
 
 
 
@@ -157,13 +157,14 @@ app.frame("/result", async (c) => {
 
 app.frame("/leaderboard", async (c) => {
   try {
-      const channel = c.inputText || 'farhack';
-      const timeframe = 'week'; // You can make this dynamic if needed
+    const channel = c.inputText || 'farhack';
+    const timeframe = 'week';
 
-      const topContributors = await fetchTopContributors(channel, 10);
-      const detailedData = await Promise.all(
-          topContributors.map(contributor => getDetailedUserData(contributor.fid, timeframe))
-      );
+    const topContributors: Contributor[] = await fetchTopContributors(channel, 10);
+    const detailedData = await Promise.all(
+      topContributors.map((contributor: Contributor) => getDetailedUserData(contributor.fid, timeframe))
+    );
+
 
       const leaderboardSvg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">

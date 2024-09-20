@@ -3,6 +3,18 @@ import { Fan } from "./interface";
 
 Lum0x.init(process.env.LUM0X_API_KEY || "");
 
+interface Cast {
+  timestamp: string;
+  reactions?: {
+    likes_count?: number;
+    recasts_count?: number;
+  };
+  author: {
+    fid: number;
+    display_name: string;
+  };
+}
+
 export async function postLum0xTestFrameValidation(fid: number, path: string) {
   try {
     console.log(`Posting frame validation for fid: ${fid}, path: ${path}`);
@@ -27,7 +39,7 @@ export async function getTopFans(channel: string, timeframe: string, limit: numb
   try {
     let queryParams: any = {
       feed_type: "filter",
-      filter_type: channel ? "channel_id" : "global_trending", // Changed from 'all' to 'global_trending'
+      filter_type: channel ? "channel_id" : "global_trending",
       limit: 100,
     };
 
@@ -61,42 +73,61 @@ export async function getTopFans(channel: string, timeframe: string, limit: numb
 
 export async function getDetailedUserData(fid: number, timeframe: string) {
   try {
-      const res = await Lum0x.farcasterUser.getUserByFids({ fids: fid.toString() });
-      const user = res.users[0];
+    const res = await Lum0x.farcasterUser.getUserByFids({ fids: fid.toString() });
+    const user = res.users[0];
 
-      const feedRes = await Lum0x.farcasterFeed.getFeed({
-          feed_type: "filter",
-          filter_type: "fids",
-          fids: fid.toString(),
-          limit: 100,
-          start_time: getStartDate(timeframe)
-      });
+    const feedRes = await Lum0x.farcasterFeed.getFeed({
+      feed_type: "filter",
+      filter_type: "fids",
+      fids: fid.toString(),
+      limit: 100,
+    });
 
-      let totalLikes = 0;
-      let totalRecasts = 0;
-      feedRes.casts.forEach(cast => {
-          totalLikes += cast.reactions?.likes?.length || 0;
-          totalRecasts += cast.reactions?.recasts?.length || 0;
-      });
+    const startDate = new Date(getStartDate(timeframe));
 
-      return {
-          fid: user.fid,
-          username: user.username,
-          display_name: user.display_name,
-          casts: feedRes.casts.length,
-          likes: totalLikes,
-          recasts: totalRecasts,
-          score: totalLikes + (totalRecasts * 2)
-      };
+    const filteredCasts = feedRes.casts.filter((cast: Cast) => 
+      new Date(cast.timestamp) >= startDate
+    );
+
+    let totalLikes = 0;
+    let totalRecasts = 0;
+    filteredCasts.forEach((cast: Cast) => {
+      totalLikes += cast.reactions?.likes_count || 0;
+      totalRecasts += cast.reactions?.recasts_count || 0;
+    });
+
+    return {
+      fid: user.fid,
+      username: user.username,
+      display_name: user.display_name,
+      casts: filteredCasts.length,
+      likes: totalLikes,
+      recasts: totalRecasts,
+      score: totalLikes + (totalRecasts * 2)
+    };
   } catch (error) {
-      console.error("Error fetching detailed user data:", error);
-      throw error;
+    console.error("Error fetching detailed user data:", error);
+    throw error;
   }
 }
 
+function getStartDate(timeframe: string): string {
+  let date = new Date();
+  switch (timeframe) {
+    case 'day':
+      date.setDate(date.getDate() - 1);
+      break;
+    case 'week':
+      date.setDate(date.getDate() - 7);
+      break;
+    case 'month':
+      date.setMonth(date.getMonth() - 1);
+      break;
+  }
+  return date.toISOString();
+}
 
-
-function processEngagement(cast: any, fanEngagement: { [key: number]: Fan }) {
+function processEngagement(cast: Cast, fanEngagement: { [key: number]: Fan }) {
   let fid = cast.author.fid;
   if (!fanEngagement[fid]) {
     fanEngagement[fid] = {
@@ -108,30 +139,13 @@ function processEngagement(cast: any, fanEngagement: { [key: number]: Fan }) {
     };
   }
 
-  fanEngagement[fid].recasts += cast.reactions.recasts_count || 0;
-  fanEngagement[fid].reactions += cast.reactions.likes_count || 0;
-  fanEngagement[fid].score += calculateScore(cast.reactions.recasts_count || 0, cast.reactions.likes_count || 0);
+  fanEngagement[fid].recasts += cast.reactions?.recasts_count || 0;
+  fanEngagement[fid].reactions += cast.reactions?.likes_count || 0;
+  fanEngagement[fid].score += calculateScore(cast.reactions?.recasts_count || 0, cast.reactions?.likes_count || 0);
 
   console.log(`Processed engagement for fid ${fid}:`, JSON.stringify(fanEngagement[fid], null, 2));
 }
 
 function calculateScore(recasts: number, reactions: number): number {
   return (recasts * 2 + reactions) || 0;
-}
-
-
-function getStartDate(timeframe: string): string {
-  let date = new Date();
-  switch (timeframe) {
-      case 'day':
-          date.setDate(date.getDate() - 1);
-          break;
-      case 'week':
-          date.setDate(date.getDate() - 7);
-          break;
-      case 'month':
-          date.setMonth(date.getMonth() - 1);
-          break;
-  }
-  return date.toISOString();
 }
